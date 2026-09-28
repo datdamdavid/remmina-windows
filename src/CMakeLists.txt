@@ -168,6 +168,7 @@ compile_gresources(
 add_custom_target(resource DEPENDS ${RESOURCE_FILE})
 add_executable(remmina ${REMMINA_SRCS} ${RESOURCE_FILE})
 if(WIN32)
+  target_sources(remmina PRIVATE remmina.rc)
   target_link_libraries(remmina ${GTK_LIBRARIES} ws2_32 shlwapi)
   set_target_properties(remmina PROPERTIES ENABLE_EXPORTS ON)
   target_link_options(remmina PRIVATE "-Wl,--export-all-symbols")

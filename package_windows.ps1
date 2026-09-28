@@ -31,6 +31,9 @@ if (!(Test-Path $srcPlugin)) {
 
 Copy-Item $srcExe -Destination "$DistDir\remmina.exe" -Force
 Copy-Item $srcPlugin -Destination "$DistDir\plugins\remmina-plugin-rdp.dll" -Force
+if (Test-Path "$PSScriptRoot\src\remmina.ico") {
+    Copy-Item "$PSScriptRoot\src\remmina.ico" -Destination "$DistDir\remmina.ico" -Force
+}
 
 # 2. Copy GDK Pixbuf loaders
 $srcPixbufDir = "C:\msys64\ucrt64\lib\gdk-pixbuf-2.0\2.10.0"

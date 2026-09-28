@@ -330,6 +330,16 @@ static void remmina_on_startup(GApplication *app)
 #ifndef _WIN32
 	g_unix_signal_add(SIGINT, remmina_sigint_cb, NULL);
 	g_unix_signal_add(SIGTERM, remmina_sigint_cb, NULL);
+#else
+	/* Set explicit AppUserModelID so Windows taskbar groups and pins Remmina correctly */
+	typedef HRESULT (WINAPI *pfnSetCurrentProcessExplicitAppUserModelID)(PCWSTR);
+	HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
+	if (hShell32) {
+		pfnSetCurrentProcessExplicitAppUserModelID pfn =
+			(pfnSetCurrentProcessExplicitAppUserModelID)GetProcAddress(hShell32, "SetCurrentProcessExplicitAppUserModelID");
+		if (pfn)
+			pfn(L"org.remmina.Remmina");
+	}
 #endif
 
 #ifdef _WIN32
