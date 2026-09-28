@@ -125,7 +125,9 @@ if(WITH_EXAMPLES)
     add_subdirectory(tool_hello_world)
 endif()
 
-add_subdirectory(exec)
+if(NOT WIN32)
+    add_subdirectory(exec)
+endif()
 
 option(WITH_KF5WALLET "Building KF5WALLET plugin" OFF)
 if(WITH_KF5WALLET)

@@ -350,7 +350,7 @@ remmina_sftp_client_thread_recursive_localdir(RemminaSFTPClient *client, Remmina
 	const gchar *name;
 	gchar *relpath;
 	gchar *abspath;
-	struct stat st;
+	GStatBuf st;
 	gboolean ret = TRUE;
 
 	path = g_build_filename(rootdir_path, subdir_path, NULL);

@@ -167,8 +167,12 @@ compile_gresources(
 
 add_custom_target(resource DEPENDS ${RESOURCE_FILE})
 add_executable(remmina ${REMMINA_SRCS} ${RESOURCE_FILE})
-add_dependencies(remmina resource)
-target_link_libraries(remmina ${GTK_LIBRARIES} -rdynamic)
+if(WIN32)
+  target_link_libraries(remmina ${GTK_LIBRARIES} ws2_32 shlwapi)
+  set_target_properties(remmina PROPERTIES ENABLE_EXPORTS ON)
+else()
+  target_link_libraries(remmina ${GTK_LIBRARIES} -rdynamic)
+endif()
 
 if(WITH_PYTHONLIBS)
   if(PythonLibs_FOUND)

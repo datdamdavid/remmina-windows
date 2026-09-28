@@ -166,8 +166,13 @@ void remmina_rdp_event_event_push(RemminaProtocolWidget *gp, const RemminaPlugin
 #endif
 		g_async_queue_push(rfi->event_queue, event);
 
+#ifdef _WIN32
+		if (rfi->event_handle)
+			SetEvent(rfi->event_handle);
+#else
 		if (write(rfi->event_pipe[1], "\0", 1)) {
 		}
+#endif
 	}
 }
 
@@ -1183,6 +1188,13 @@ void remmina_rdp_event_init(RemminaProtocolWidget *gp)
 	rfi->ui_queue = g_async_queue_new();
 	pthread_mutex_init(&rfi->ui_queue_mutex, NULL);
 
+#ifdef _WIN32
+	rfi->event_pipe[0] = -1;
+	rfi->event_pipe[1] = -1;
+	rfi->event_handle = CreateEvent(NULL, TRUE, FALSE, NULL);
+	if (!rfi->event_handle)
+		g_print("CreateEvent() failed\n");
+#else
 	if (pipe(rfi->event_pipe)) {
 		g_print("Error creating pipes.\n");
 		rfi->event_pipe[0] = -1;
@@ -1195,6 +1207,7 @@ void remmina_rdp_event_init(RemminaProtocolWidget *gp)
 		if (!rfi->event_handle)
 			g_print("CreateFileDescriptorEvent() failed\n");
 	}
+#endif
 
 	rfi->object_table = g_hash_table_new_full(NULL, NULL, NULL, g_free);
 
@@ -1311,8 +1324,10 @@ void remmina_rdp_event_uninit(RemminaProtocolWidget *gp)
 		rfi->event_handle = NULL;
 	}
 
+#ifndef _WIN32
 	close(rfi->event_pipe[0]);
 	close(rfi->event_pipe[1]);
+#endif
 }
 
 static void remmina_rdp_event_create_cairo_surface(rfContext *rfi)

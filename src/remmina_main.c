@@ -39,7 +39,7 @@
 #include "config.h"
 #include <ctype.h>
 #include <gio/gio.h>
-#ifndef __APPLE__
+#if !defined(__APPLE__) && !defined(_WIN32)
 #include <gio/gdesktopappinfo.h>
 #endif
 #include <gdk/gdkkeysyms.h>
@@ -1256,7 +1256,7 @@ void remmina_main_on_action_application_preferences(GSimpleAction *action, GVari
 void remmina_main_on_action_application_default(GSimpleAction *action, GVariant *param, gpointer data)
 {
 	TRACE_CALL(__func__);
-#ifndef __APPLE__
+#if !defined(__APPLE__) && !defined(_WIN32)
 	g_autoptr(GError) error = NULL;
 	GDesktopAppInfo *desktop_info;
 	GAppInfo *info = NULL;

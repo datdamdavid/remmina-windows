@@ -38,6 +38,41 @@
 #include "buildflags.h"
 #include <glib/gi18n.h>
 #include <stdlib.h>
+#include <stdio.h>
+
+#ifdef _WIN32
+static ssize_t remmina_getline(char **lineptr, size_t *n, FILE *stream)
+{
+	if (!lineptr || !n || !stream)
+		return -1;
+	if (!*lineptr || *n == 0) {
+		*n = 256;
+		*lineptr = (char*)malloc(*n);
+		if (!*lineptr)
+			return -1;
+	}
+	size_t pos = 0;
+	int c;
+	while ((c = fgetc(stream)) != EOF) {
+		if (pos + 1 >= *n) {
+			size_t new_len = *n * 2;
+			char *new_ptr = (char*)realloc(*lineptr, new_len);
+			if (!new_ptr)
+				return -1;
+			*lineptr = new_ptr;
+			*n = new_len;
+		}
+		(*lineptr)[pos++] = (char)c;
+		if (c == '\n')
+			break;
+	}
+	if (pos == 0 && c == EOF)
+		return -1;
+	(*lineptr)[pos] = '\0';
+	return (ssize_t)pos;
+}
+#define getline remmina_getline
+#endif
 #include "remmina.h"
 #include "remmina_main.h"
 #include "remmina_log.h"

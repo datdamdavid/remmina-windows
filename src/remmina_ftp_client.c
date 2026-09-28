@@ -601,7 +601,7 @@ static void remmina_ftp_client_action_upload(GObject *object, RemminaFTPClient *
 	GSList *element;
 	gchar *path;
 	gchar *dir, *name;
-	struct stat st;
+	GStatBuf st;
 
 	dialog = gtk_file_chooser_dialog_new(_("Choose a file to upload"),
 		GTK_WINDOW(gtk_widget_get_toplevel(GTK_WIDGET(client))), GTK_FILE_CHOOSER_ACTION_OPEN, _("_Cancel"),

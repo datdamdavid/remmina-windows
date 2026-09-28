@@ -1366,8 +1366,12 @@ static void remmina_rdp_main_loop(RemminaProtocolWidget *gp)
 				fprintf(stderr, "Could not process local keyboard/mouse event queue\n");
 				break;
 			}
+#ifdef _WIN32
+			ResetEvent(rfi->event_handle);
+#else
 			if (read(rfi->event_pipe[0], buf, sizeof(buf))) {
 			}
+#endif
 		}
 
 		/* Check if a processed event called freerdp_abort_connect() and exit if true */
@@ -3542,6 +3546,21 @@ static RemminaPrefPlugin remmina_rdps =
 	"RDP",                                          // Label
 	remmina_rdp_settings_new                        // Preferences body function
 };
+
+#ifdef _WIN32
+static char *remmina_strcasestr(const char *haystack, const char *needle)
+{
+	if (!haystack || !needle) return NULL;
+	if (!*needle) return (char *)haystack;
+	size_t nlen = strlen(needle);
+	for (; *haystack; haystack++) {
+		if (g_ascii_strncasecmp(haystack, needle, nlen) == 0)
+			return (char *)haystack;
+	}
+	return NULL;
+}
+#define strcasestr remmina_strcasestr
+#endif
 
 static char *buildconfig_strstr(const char *bc, const char *option)
 {

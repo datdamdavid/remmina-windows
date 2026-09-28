@@ -42,7 +42,9 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/time.h>
+#ifndef _WIN32
 #include <sys/utsname.h>
+#endif
 
 #include <glib/gstdio.h>
 #include <gdk/gdkkeysyms.h>

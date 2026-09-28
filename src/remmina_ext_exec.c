@@ -37,7 +37,9 @@
 #include <glib/gi18n.h>
 #include <glib.h>
 #include <stdlib.h>
+#ifndef _WIN32
 #include <sys/wait.h>
+#endif
 #include <unistd.h>
 #include "remmina_utils.h"
 #include "remmina_ext_exec.h"

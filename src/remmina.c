@@ -32,6 +32,10 @@
  *  files in the program, then also delete it here.
  *
  */
+#ifdef _WIN32
+#include <winsock2.h>
+#include <windows.h>
+#endif
 #include <curl/curl.h>
 #include <gdk/gdk.h>
 
@@ -46,7 +50,9 @@
 #endif
 #include <gio/gio.h>
 #include <glib/gi18n.h>
+#ifndef _WIN32
 #include <glib-unix.h>
+#endif
 #include <stdlib.h>
 
 #include "config.h"
@@ -294,11 +300,13 @@ static gint remmina_on_command_line(GApplication *app, GApplicationCommandLine *
 	return status;
 }
 
+#ifndef _WIN32
 static gboolean remmina_sigint_cb(gpointer data)
 {
 	remmina_application_condexit(REMMINA_CONDEXIT_ONQUIT);
 	return G_SOURCE_REMOVE;
 }
+#endif
 
 static void remmina_on_startup(GApplication *app)
 {
@@ -310,8 +318,6 @@ static void remmina_on_startup(GApplication *app)
 	/* Start following the desktop light/dark preference (if enabled in prefs) and
 	 * subscribe to live changes, before any window is shown. */
 	remmina_theme_init();
-	remmina_sftp_plugin_register();
-	remmina_ssh_plugin_register();
 	remmina_icon_init();
 	g_set_application_name("Remmina");
 
@@ -321,8 +327,10 @@ static void remmina_on_startup(GApplication *app)
 	* windows with .desktop file which has the same StartupWMClass */
 	gdk_set_program_class(REMMINA_CLASS_ID);
 
+#ifndef _WIN32
 	g_unix_signal_add(SIGINT, remmina_sigint_cb, NULL);
 	g_unix_signal_add(SIGTERM, remmina_sigint_cb, NULL);
+#endif
 
 	gtk_icon_theme_append_search_path(gtk_icon_theme_get_default(),
 					  REMMINA_RUNTIME_DATADIR G_DIR_SEPARATOR_S "icons");
@@ -403,6 +411,51 @@ int main(int argc, char *argv[])
 
 	g_unsetenv("GDK_CORE_DEVICE_EVENTS");
 
+#ifdef _WIN32
+	wchar_t w_exe_path[MAX_PATH];
+	if (GetModuleFileNameW(NULL, w_exe_path, MAX_PATH)) {
+		gchar *exe_path = g_utf16_to_utf8(w_exe_path, -1, NULL, NULL, NULL);
+		if (exe_path) {
+			gchar *exe_dir = g_path_get_dirname(exe_path);
+
+			// 1. Set GSETTINGS_SCHEMA_DIR if not set
+			if (!g_getenv("GSETTINGS_SCHEMA_DIR")) {
+				gchar *schemas = g_build_filename(exe_dir, "share", "glib-2.0", "schemas", NULL);
+				if (g_file_test(schemas, G_FILE_TEST_IS_DIR)) {
+					g_setenv("GSETTINGS_SCHEMA_DIR", schemas, TRUE);
+				}
+				g_free(schemas);
+			}
+
+			// 2. Set GDK_PIXBUF_MODULE_FILE if not set
+			if (!g_getenv("GDK_PIXBUF_MODULE_FILE")) {
+				gchar *cache = g_build_filename(exe_dir, "lib", "gdk-pixbuf-2.0", "2.10.0", "loaders.cache", NULL);
+				if (g_file_test(cache, G_FILE_TEST_EXISTS)) {
+					g_setenv("GDK_PIXBUF_MODULE_FILE", cache, TRUE);
+				}
+				g_free(cache);
+			}
+
+			// 3. Set XDG_DATA_DIRS if not set
+			if (!g_getenv("XDG_DATA_DIRS")) {
+				gchar *share = g_build_filename(exe_dir, "share", NULL);
+				if (g_file_test(share, G_FILE_TEST_IS_DIR)) {
+					g_setenv("XDG_DATA_DIRS", share, TRUE);
+				}
+				g_free(share);
+			}
+
+			// 4. Set GTK_DATA_PREFIX if not set
+			if (!g_getenv("GTK_DATA_PREFIX")) {
+				g_setenv("GTK_DATA_PREFIX", exe_dir, TRUE);
+			}
+
+			g_free(exe_dir);
+			g_free(exe_path);
+		}
+	}
+#endif
+
 	// Checking for environment variable "G_MESSAGES_DEBUG"
 	// Give the less familiar with GLib a tip on where to get
 	// more debugging info.
@@ -419,12 +472,16 @@ int main(int argc, char *argv[])
 		));
 	}
 
+#ifndef _WIN32
 	/* Enable wayland backend only after GTK 3.22.27 or the clipboard
 	 * will not work. See GTK bug 790031 */
 	if (remmina_gtk_check_version(3, 22, 27))
 		gdk_set_allowed_backends("wayland,x11,broadway,quartz,mir");
 	else
 		gdk_set_allowed_backends("x11,broadway,quartz,mir");
+#else
+	gdk_set_allowed_backends("win32");
+#endif
 
 	remmina_masterthread_exec_save_main_thread_id();
 
@@ -451,6 +508,8 @@ int main(int argc, char *argv[])
 	remmina_pref_init();
 	remmina_file_manager_init();
 	remmina_plugin_manager_init();
+	remmina_sftp_plugin_register();
+	remmina_ssh_plugin_register();
 
 	app_id = g_application_id_is_valid(REMMINA_APP_ID) ? REMMINA_APP_ID : NULL;
 	app = gtk_application_new(app_id, G_APPLICATION_HANDLES_COMMAND_LINE | G_APPLICATION_CAN_OVERRIDE_APP_ID);

@@ -274,6 +274,10 @@ endif()
 set(CMAKE_SHARED_LINKER_FLAGS
     "${CMAKE_SHARED_LINKER_FLAGS} ${NO_UNDEFINED_FLAG}")
 
+if(WIN32)
+  add_definitions(-D__STDC_NO_THREADS__)
+endif()
+
 check_include_files(sys/socket.h HAVE_SYS_SOCKET_H)
 check_include_files(arpa/inet.h HAVE_ARPA_INET_H)
 check_include_files(netinet/in.h HAVE_NETINET_IN_H)

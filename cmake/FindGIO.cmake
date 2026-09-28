@@ -34,7 +34,11 @@ set(GIO_DEPS
 
 if(PKG_CONFIG_FOUND)
   pkg_search_module(GIO_PKG gio-2.0)
-  pkg_check_modules(GIO-UNIX_PKG REQUIRED gio-unix-2.0)
+  if(NOT WIN32)
+    pkg_check_modules(GIO-UNIX_PKG REQUIRED gio-unix-2.0)
+  else()
+    pkg_check_modules(GIO-WINDOWS_PKG gio-windows-2.0)
+  endif()
 endif()
 
 find_library(GIO_LIBRARY gio-2.0 HINTS ${GIO_PKG_LIBRARY_DIRS})
@@ -48,7 +52,7 @@ if(GIO_LIBRARY AND NOT GIO_FOUND)
   find_path(GIO_INCLUDE_DIR "gio/gio.h"
     HINTS ${GIO_PKG_INCLUDE_DIRS})
 
-  if(NOT APPLE)
+  if(NOT APPLE AND NOT WIN32)
     find_path(GIO-UNIX_INCLUDE_DIR "gio/gdesktopappinfo.h"
       HINTS ${GIO-UNIX_PKG_INCLUDE_DIRS})
     list(APPEND GIO_INCLUDE_DIRS ${GIO-UNIX_INCLUDE_DIR})

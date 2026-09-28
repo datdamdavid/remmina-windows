@@ -39,7 +39,9 @@
 
 #include <stdlib.h>
 #include <unistd.h>
+#ifndef _WIN32
 #include <sys/utsname.h>
+#endif
 #include <locale.h>
 
 #include <glib/gi18n.h>
@@ -319,7 +321,7 @@ static gchar *remmina_utils_read_distrofile(gchar *filename)
 {
 	TRACE_CALL(__func__);
 	gsize file_sz;
-	struct stat st;
+	GStatBuf st;
 	gchar *distro_desc = NULL;
 	GError *err = NULL;
 
@@ -370,12 +372,16 @@ gchar *remmina_utils_get_lang(void)
 gchar *remmina_utils_get_kernel_name(void)
 {
 	TRACE_CALL(__func__);
+#ifdef _WIN32
+	return g_strdup("Windows");
+#else
 	struct utsname u;
 
 	if (uname(&u) == -1) {
 		return NULL;
 	}
 	return g_strdup(u.sysname);
+#endif
 }
 
 /**
@@ -385,12 +391,16 @@ gchar *remmina_utils_get_kernel_name(void)
 gchar *remmina_utils_get_kernel_release(void)
 {
 	TRACE_CALL(__func__);
+#ifdef _WIN32
+	return g_strdup("NT");
+#else
 	struct utsname u;
 
 	if (uname(&u) == -1) {
 		return NULL;
 	}
 	return g_strdup(u.release);
+#endif
 }
 
 /**
@@ -400,12 +410,16 @@ gchar *remmina_utils_get_kernel_release(void)
 gchar *remmina_utils_get_kernel_arch(void)
 {
 	TRACE_CALL(__func__);
+#ifdef _WIN32
+	return g_strdup("x86_64");
+#else
 	struct utsname u;
 
 	if (uname(&u) == -1) {
 		return NULL;
 	}
 	return g_strdup(u.machine);
+#endif
 }
 
 gchar *remmina_utils_run_command(gchar* command)
@@ -568,6 +582,9 @@ gchar *remmina_utils_get_mage(void)
 	if (mage == NULL) {
 		return "";
 	}
+#ifdef _WIN32
+	strcpy(mage, "0");
+#else
 	struct stat sb;
 
 	if (stat("/etc/machine-id", &sb) == 0) {
@@ -576,6 +593,7 @@ gchar *remmina_utils_get_mage(void)
 	else {
 		strcpy(mage, "0");
 	}
+#endif
 	
 	return mage;
 }

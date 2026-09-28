@@ -42,7 +42,9 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <locale.h>
+#ifndef _WIN32
 #include <langinfo.h>
+#endif
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -1065,9 +1067,9 @@ remmina_file_get_datetime(RemminaFile *remminafile)
 		g_object_unref(info);
 	}
 
-	tv.tv_sec = mtime;
+	time_t tsec = (time_t)mtime;
 
-	ptm = localtime(&tv.tv_sec);
+	ptm = localtime(&tsec);
 	strftime(time_string, sizeof(time_string), "%F - %T", ptm);
 
 	gchar *modtime_string = g_locale_to_utf8(time_string, -1, NULL, NULL, NULL);
@@ -1086,6 +1088,14 @@ void
 remmina_file_touch(RemminaFile *remminafile)
 {
 	TRACE_CALL(__func__);
+#ifdef _WIN32
+	if (g_file_test(remminafile->statefile, G_FILE_TEST_EXISTS)) {
+		utime(remminafile->statefile, NULL);
+		return;
+	}
+	FILE *fp = g_fopen(remminafile->statefile, "w");
+	if (fp) fclose(fp);
+#else
 	int fd;
 	struct stat st;
 	int r;
@@ -1111,4 +1121,5 @@ remmina_file_touch(RemminaFile *remminafile)
 	close(fd);
 
 	remmina_file_touch(remminafile);
+#endif
 }

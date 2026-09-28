@@ -38,6 +38,10 @@
 #include "config.h"
 
 
+#ifdef _WIN32
+#include <winsock2.h>
+#include <windows.h>
+#endif
 #include <gtk/gtk.h>
 #include <glib/gi18n.h>
 #include <gmodule.h>
@@ -334,10 +338,14 @@ RemminaPluginService remmina_plugin_manager_service =
 };
 
 static const char *get_filename_ext(const char *filename) {
-	const char* last = strrchr(filename, '/');
-    const char *dot = strrchr(last, '.');
-    if(!dot || dot == filename) return "";
-    return dot + 1;
+	if (!filename) return "";
+	const char *slash = strrchr(filename, '/');
+	const char *bslash = strrchr(filename, '\\');
+	const char *last = slash > bslash ? slash : bslash;
+	if (!last) last = filename;
+	const char *dot = strrchr(last, '.');
+	if(!dot || dot == last) return "";
+	return dot + 1;
 }
 
 static gint compare_secret_plugin_init_order(gconstpointer a, gconstpointer b)
@@ -404,9 +412,13 @@ static void remmina_plugin_manager_load_plugins(GPtrArray *plugin_dirs, int arra
 				if ((ptr = strrchr(name, '.')) == NULL)
 					continue;
 				ptr++;
+				if (!g_str_has_prefix(name, "remmina-plugin-") && !g_str_has_prefix(name, "remmina_plugin_"))
+					continue;
 				fullpath = g_strconcat(plugin_dir, "/", name, NULL);
 				if (!remmina_plugin_manager_loader_supported(ptr)) {
-					g_ptr_array_add(alternative_language_plugins, g_strconcat(plugin_dir, "/", name, NULL));
+					if (g_ascii_strcasecmp(ptr, "py") == 0) {
+						g_ptr_array_add(alternative_language_plugins, g_strconcat(plugin_dir, "/", name, NULL));
+					}
 					g_free(fullpath);
 					continue;
 				}
@@ -502,35 +514,96 @@ void remmina_plugin_manager_init(void)
 {
 	TRACE_CALL(__func__);
 
-	gchar* alternative_dir;
-
 	remmina_plugin_table = g_ptr_array_new();
 	remmina_available_plugin_table = g_ptr_array_new();
-	GPtrArray *plugin_dirs = g_ptr_array_new();
-	int array_size = 1;
+	GPtrArray *plugin_dirs = g_ptr_array_new_with_free_func(g_free);
 
 	if (!g_module_supported()) {
 		g_print("Dynamic loading of plugins is not supported on this platform!\n");
 		return;
 	}
-	alternative_dir = remmina_plugin_manager_create_alt_plugin_dir();
 
-	if(alternative_dir != NULL){
+#ifdef _WIN32
+	// 1. Check environment variable REMMINA_PLUGIN_PATH
+	const gchar *env_plugin_path = g_getenv("REMMINA_PLUGIN_PATH");
+	if (env_plugin_path) {
+		gchar **tokens = g_strsplit(env_plugin_path, ";", -1);
+		for (int t = 0; tokens && tokens[t]; t++) {
+			if (g_file_test(tokens[t], G_FILE_TEST_IS_DIR)) {
+				g_ptr_array_add(plugin_dirs, g_strdup(tokens[t]));
+			}
+		}
+		g_strfreev(tokens);
+	}
+
+	// 2. Discover relative to remmina.exe
+	wchar_t w_exe_path[MAX_PATH];
+	if (GetModuleFileNameW(NULL, w_exe_path, MAX_PATH)) {
+		gchar *exe_path = g_utf16_to_utf8(w_exe_path, -1, NULL, NULL, NULL);
+		if (exe_path) {
+			gchar *exe_dir = g_path_get_dirname(exe_path);
+
+			// Check <exe_dir>/plugins
+			gchar *plugins_subdir = g_build_filename(exe_dir, "plugins", NULL);
+			if (g_file_test(plugins_subdir, G_FILE_TEST_IS_DIR)) {
+				g_ptr_array_add(plugin_dirs, plugins_subdir);
+			} else {
+				g_free(plugins_subdir);
+			}
+
+			// Check <exe_dir>/plugins/rdp
+			gchar *plugins_rdp_subdir = g_build_filename(exe_dir, "plugins", "rdp", NULL);
+			if (g_file_test(plugins_rdp_subdir, G_FILE_TEST_IS_DIR)) {
+				g_ptr_array_add(plugin_dirs, plugins_rdp_subdir);
+			} else {
+				g_free(plugins_rdp_subdir);
+			}
+
+			// Check <exe_dir> itself
+			g_ptr_array_add(plugin_dirs, g_strdup(exe_dir));
+
+			// Check <exe_dir>/../plugins (e.g. bin/../plugins)
+			gchar *parent_dir = g_path_get_dirname(exe_dir);
+			gchar *parent_plugins = g_build_filename(parent_dir, "plugins", NULL);
+			if (g_file_test(parent_plugins, G_FILE_TEST_IS_DIR)) {
+				g_ptr_array_add(plugin_dirs, parent_plugins);
+			} else {
+				g_free(parent_plugins);
+			}
+
+			// Check <exe_dir>/../plugins/rdp (for build tree: build/src/../plugins/rdp)
+			gchar *parent_plugins_rdp = g_build_filename(parent_dir, "plugins", "rdp", NULL);
+			if (g_file_test(parent_plugins_rdp, G_FILE_TEST_IS_DIR)) {
+				g_ptr_array_add(plugin_dirs, parent_plugins_rdp);
+			} else {
+				g_free(parent_plugins_rdp);
+			}
+			g_free(parent_dir);
+
+			g_free(exe_dir);
+			g_free(exe_path);
+		}
+	}
+#endif
+
+	gchar *alternative_dir = remmina_plugin_manager_create_alt_plugin_dir();
+	if (alternative_dir != NULL) {
 		g_ptr_array_add(plugin_dirs, alternative_dir);
-		array_size += 1;
-		
-	}
-	g_ptr_array_add(plugin_dirs, REMMINA_RUNTIME_PLUGINDIR);
-	remmina_plugin_manager_load_plugins(plugin_dirs, array_size, FALSE);
-
-
-	if (alternative_dir){
-		g_free(alternative_dir);
 	}
 
-	if (plugin_dirs != NULL) {
-		g_ptr_array_free(plugin_dirs, TRUE);
+	if (g_file_test(REMMINA_RUNTIME_PLUGINDIR, G_FILE_TEST_IS_DIR)) {
+		g_ptr_array_add(plugin_dirs, g_strdup(REMMINA_RUNTIME_PLUGINDIR));
 	}
+
+	GPtrArray *dirs_to_load = g_ptr_array_new();
+	for (guint i = 0; i < plugin_dirs->len; i++) {
+		g_ptr_array_add(dirs_to_load, g_ptr_array_index(plugin_dirs, i));
+	}
+
+	remmina_plugin_manager_load_plugins(dirs_to_load, dirs_to_load->len, FALSE);
+
+	g_ptr_array_free(dirs_to_load, TRUE);
+	g_ptr_array_free(plugin_dirs, TRUE);
 }
 
 /*

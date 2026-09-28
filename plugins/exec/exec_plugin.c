@@ -43,7 +43,9 @@
 #include <gtk/gtk.h>
 #include <glib.h>
 #include <stdlib.h>
+#ifndef _WIN32
 #include <sys/wait.h>
+#endif
 #include <unistd.h>
 
 #define GET_PLUGIN_DATA(gp) (RemminaPluginExecData*)g_object_get_data(G_OBJECT(gp), "plugin-data")

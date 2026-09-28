@@ -86,7 +86,11 @@ G_DEFINE_TYPE(RemminaConnectionWindow, rcw, GTK_TYPE_WINDOW)
 
 #define MOTION_TIME 100
 
+#ifdef GDK_WINDOWING_WAYLAND
 #define IS_WAYLAND(widget) (GDK_IS_WAYLAND_DISPLAY(gtk_widget_get_display(GTK_WIDGET(widget))))
+#else
+#define IS_WAYLAND(widget) (FALSE)
+#endif
 
 /* default timeout used to hide the floating toolbar when switching profile */
 #define TB_HIDE_TIME_TIME 1500

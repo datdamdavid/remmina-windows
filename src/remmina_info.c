@@ -137,7 +137,9 @@
 
 #include "config.h"
 #include <string.h>
+#ifndef _WIN32
 #include <sys/utsname.h>
+#endif
 #include <unistd.h>
 #include <glib/gi18n.h>
 #include <glib/gstdio.h>

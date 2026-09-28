@@ -52,7 +52,24 @@
 #include <libssh/libssh.h>
 #include <gtk/gtk.h>
 #include <glib/gi18n.h>
+#ifndef _WIN32
 #include <poll.h>
+#else
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#ifndef SHUT_RDWR
+#define SHUT_RDWR SD_BOTH
+#endif
+#ifndef SHUT_RD
+#define SHUT_RD SD_RECEIVE
+#endif
+#ifndef SHUT_WR
+#define SHUT_WR SD_SEND
+#endif
+#ifndef EAI_SYSTEM
+#define EAI_SYSTEM -11
+#endif
+#endif
 #include <stdlib.h>
 #include <signal.h>
 #include <time.h>
@@ -158,7 +175,7 @@ static int remmina_ssh_connect_local_xsocket(int display_number);
 static int remmina_ssh_x11_connect_display(void);
 
 // Send data to channel
-static int remmina_ssh_cp_to_ch_cb(int fd, int revents, void *userdata);
+static int remmina_ssh_cp_to_ch_cb(socket_t fd, int revents, void *userdata);
 
 // Read data from channel
 static int remmina_ssh_cp_to_fd_cb(ssh_session session, ssh_channel channel, void *data, uint32_t len, int is_stderr, void *userdata);
@@ -280,7 +297,7 @@ remmina_ssh_set_nodelay(int fd)
 	socklen_t optlen;
 
 	optlen = sizeof(opt);
-	if (getsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &opt, &optlen) == -1) {
+	if (getsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (char *)&opt, &optlen) == -1) {
 		REMMINA_WARNING("getsockopt TCP_NODELAY: %.100s", strerror(errno));
 		return;
 	}
@@ -290,7 +307,7 @@ remmina_ssh_set_nodelay(int fd)
 	}
 	opt = 1;
 	REMMINA_DEBUG("fd %d setting TCP_NODELAY", fd);
-	if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt)) == -1)
+	if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (const char *)&opt, sizeof(opt)) == -1)
 		REMMINA_WARNING("setsockopt TCP_NODELAY: %.100s", strerror(errno));
 }
 
@@ -357,7 +374,9 @@ static int
 remmina_ssh_connect_local_xsocket_path(const char *pathname)
 {
 	TRACE_CALL(__func__);
-
+#ifdef _WIN32
+	return -1;
+#else
 	int sock;
 	struct sockaddr_un addr;
 
@@ -378,6 +397,7 @@ remmina_ssh_connect_local_xsocket_path(const char *pathname)
 	close(sock);
 
 	return -1;
+#endif
 }
 
 static int
@@ -483,7 +503,7 @@ remmina_ssh_x11_connect_display(void)
 }
 
 static int
-remmina_ssh_cp_to_ch_cb(int fd, int revents, void *userdata)
+remmina_ssh_cp_to_ch_cb(socket_t fd, int revents, void *userdata)
 {
 	TRACE_CALL(__func__);
 	ssh_channel channel = (ssh_channel)userdata;
@@ -2327,21 +2347,34 @@ remmina_ssh_tunnel_add_channel(RemminaSSHTunnel *tunnel, ssh_channel channel, gi
 	tunnel->sockets[i] = sock;
 	tunnel->socketbuffers[i] = NULL;
 
+#ifdef _WIN32
+	u_long mode = 1;
+	ioctlsocket(sock, FIONBIO, &mode);
+#else
 	flags = fcntl(sock, F_GETFL, 0);
 	fcntl(sock, F_SETFL, flags | O_NONBLOCK);
+#endif
 }
 
 static int
 remmina_ssh_tunnel_accept_local_connection(RemminaSSHTunnel *tunnel, gboolean blocking)
 {
-	gint sock, sock_flags;
+	gint sock;
+#ifndef _WIN32
+	gint sock_flags;
+#endif
 
+#ifdef _WIN32
+	u_long mode = blocking ? 0 : 1;
+	ioctlsocket(tunnel->server_sock, FIONBIO, &mode);
+#else
 	sock_flags = fcntl(tunnel->server_sock, F_GETFL, 0);
 	if (blocking)
 		sock_flags &= ~O_NONBLOCK;
 	else
 		sock_flags |= O_NONBLOCK;
 	fcntl(tunnel->server_sock, F_SETFL, sock_flags);
+#endif
 
 	/* Accept a local connection */
 	sock = accept(tunnel->server_sock, NULL, NULL);
@@ -2762,7 +2795,7 @@ remmina_ssh_tunnel_open(RemminaSSHTunnel *tunnel, const gchar *host, gint port, 
 		REMMINA_SSH(tunnel)->error = g_strdup(_("Could not create socket."));
 		return FALSE;
 	}
-	setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &sockopt, sizeof(sockopt));
+	setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (const char *)&sockopt, sizeof(sockopt));
 
 	sin.sin_family = AF_INET;
 	sin.sin_port = htons(local_port);
@@ -3181,6 +3214,10 @@ gboolean
 remmina_ssh_shell_open(RemminaSSHShell *shell, RemminaSSHExitFunc exit_callback, gpointer data)
 {
 	TRACE_CALL(__func__);
+#ifdef _WIN32
+	REMMINA_SSH(shell)->error = g_strdup(_("PTY is not supported on Windows."));
+	return FALSE;
+#else
 	gchar *slavedevice;
 	struct termios stermios;
 
@@ -3210,6 +3247,7 @@ remmina_ssh_shell_open(RemminaSSHShell *shell, RemminaSSHExitFunc exit_callback,
 	pthread_create(&shell->thread, NULL, remmina_ssh_shell_thread, shell);
 
 	return TRUE;
+#endif
 }
 
 void

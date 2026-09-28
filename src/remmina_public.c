@@ -50,6 +50,10 @@
 #ifdef HAVE_SYS_UN_H
 #include <sys/un.h>
 #endif
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#endif
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
 #include <X11/Xlib.h>
@@ -336,6 +340,9 @@ remmina_public_combine_path(const gchar *path1, const gchar *path2)
 
 gint remmina_public_open_unix_sock(const char *unixsock)
 {
+#ifdef _WIN32
+    return -1;
+#else
     struct sockaddr_un addr;
     int fd;
 
@@ -360,6 +367,7 @@ gint remmina_public_open_unix_sock(const char *unixsock)
     }
 
     return fd;
+#endif
 }
 
 void remmina_public_get_server_port_old(const gchar *server, gint defaultport, gchar **host, gint *port)
@@ -492,6 +500,9 @@ gboolean remmina_public_get_xauth_cookie(const gchar *display, gchar **msg)
 gint remmina_public_open_xdisplay(const gchar *disp)
 {
 	TRACE_CALL(__func__);
+#ifdef _WIN32
+	return -1;
+#else
 	gchar *display;
 	gchar *ptr;
 	gint port;
@@ -520,6 +531,7 @@ gint remmina_public_open_xdisplay(const gchar *disp)
 
 	g_free(display);
 	return sock;
+#endif
 }
 
 /* Find hardware keycode for the requested keyval */
