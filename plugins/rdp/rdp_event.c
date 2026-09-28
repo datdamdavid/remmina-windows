@@ -987,7 +987,9 @@ static gboolean remmina_rdp_event_on_key(GtkWidget *widget, GdkEventKey *event, 
 			if (keyboard_type == 0){
 				keyboard_type = WINPR_KBD_TYPE_IBM_ENHANCED;
 			}
-#ifdef GDK_WINDOWING_X11
+#if defined(_WIN32)
+			DWORD vc = hardware_keycode;
+#elif defined(GDK_WINDOWING_X11)
 			DWORD vc = GetVirtualKeyCodeFromKeycode(hardware_keycode, WINPR_KEYCODE_TYPE_XKB);
 #else
 			DWORD vc = GetVirtualKeyCodeFromKeycode(hardware_keycode, WINPR_KEYCODE_TYPE_EVDEV);
@@ -1016,7 +1018,10 @@ static gboolean remmina_rdp_event_on_key(GtkWidget *widget, GdkEventKey *event, 
 			 * - The rest as Unicode char
 			 */
 			if (event->keyval >= 0xfe00 ||                                                  // Arrows, Shift, Alt, Fn, num keypad…
-			    event->hardware_keycode == 0x41 ||                                          // Spacebar
+			    event->keyval == GDK_KEY_space ||                                           // Spacebar
+#ifdef GDK_WINDOWING_X11
+			    event->hardware_keycode == 0x41 ||                                          // Spacebar on X11
+#endif
 			    unicode_keyval == 0 ||                                                      // Impossible to translate
 			    (event->state & (GDK_MOD1_MASK | GDK_CONTROL_MASK | GDK_SUPER_MASK)) != 0   // A modifier not recognized by gdk_keyval_to_unicode()
 			    ) {
@@ -1026,7 +1031,9 @@ static gboolean remmina_rdp_event_on_key(GtkWidget *widget, GdkEventKey *event, 
 				if (keyboard_type == 0){
 					keyboard_type = WINPR_KBD_TYPE_IBM_ENHANCED;
 				}
-#ifdef GDK_WINDOWING_X11
+#if defined(_WIN32)
+				DWORD vc = hardware_keycode;
+#elif defined(GDK_WINDOWING_X11)
 				DWORD vc = GetVirtualKeyCodeFromKeycode(hardware_keycode, WINPR_KEYCODE_TYPE_XKB);
 #else
 				DWORD vc = GetVirtualKeyCodeFromKeycode(hardware_keycode, WINPR_KEYCODE_TYPE_EVDEV);

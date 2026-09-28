@@ -1361,18 +1361,28 @@ static void remmina_rdp_main_loop(RemminaProtocolWidget *gp)
 			break;
 		}
 
+#ifdef _WIN32
+		if ((rfi->event_handle && WaitForSingleObject(rfi->event_handle, 0) == WAIT_OBJECT_0) ||
+		    (rfi->event_queue && g_async_queue_length(rfi->event_queue) > 0)) {
+			if (rfi->event_handle)
+				ResetEvent(rfi->event_handle);
+			if (!rf_process_event_queue(gp)) {
+				fprintf(stderr, "Could not process local keyboard/mouse event queue\n");
+				break;
+			}
+			if (rfi->event_queue && g_async_queue_length(rfi->event_queue) > 0 && rfi->event_handle)
+				SetEvent(rfi->event_handle);
+		}
+#else
 		if (rfi->event_handle && WaitForSingleObject(rfi->event_handle, 0) == WAIT_OBJECT_0) {
 			if (!rf_process_event_queue(gp)) {
 				fprintf(stderr, "Could not process local keyboard/mouse event queue\n");
 				break;
 			}
-#ifdef _WIN32
-			ResetEvent(rfi->event_handle);
-#else
 			if (read(rfi->event_pipe[0], buf, sizeof(buf))) {
 			}
-#endif
 		}
+#endif
 
 		/* Check if a processed event called freerdp_abort_connect() and exit if true */
 		if (WaitForSingleObject(freerdp_abort_event(&rfi->clientContext.context), 0) == WAIT_OBJECT_0)

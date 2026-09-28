@@ -1737,6 +1737,12 @@ void remmina_main_quick_search_on_icon_press(GtkEntry *entry, GtkEntryIconPositi
  * If entry values equals clipboard contents, and has spaces, then strip them automatically
  */
 void remmina_entry_live_strip_value_from_clipboard(GtkEntry*entry) {
+#ifdef _WIN32
+	/* GDK_SELECTION_PRIMARY is an X11 concept (primary mouse buffer).
+	 * On Windows, querying it causes gtk_clipboard_wait_for_text() to perform
+	 * a blocking wait on the Win32 message loop on every single keystroke. */
+	return;
+#else
 	GtkClipboard *clip = gtk_clipboard_get(GDK_SELECTION_PRIMARY);
 	gchar* cliptext = gtk_clipboard_wait_for_text(clip);
 	if (cliptext == NULL)
@@ -1752,6 +1758,7 @@ void remmina_entry_live_strip_value_from_clipboard(GtkEntry*entry) {
 	if (!g_str_equal(text, stripped))
 		gtk_entry_set_text(entry, stripped);
 	g_free(stripped);
+#endif
 }
 
 void remmina_main_quick_search_on_changed(GtkEditable *editable, gpointer user_data)
