@@ -16,6 +16,7 @@ New-Item -ItemType Directory -Force -Path $DistDir | Out-Null
 New-Item -ItemType Directory -Force -Path "$DistDir\plugins" | Out-Null
 New-Item -ItemType Directory -Force -Path "$DistDir\share" | Out-Null
 New-Item -ItemType Directory -Force -Path "$DistDir\lib" | Out-Null
+New-Item -ItemType Directory -Force -Path "$DistDir\etc\gtk-3.0" | Out-Null
 
 # 1. Copy remmina.exe and RDP plugin
 $srcExe = "$PSScriptRoot\build\src\remmina.exe"
@@ -43,7 +44,16 @@ if (Test-Path "$srcPixbufDir\loaders.cache") {
     Copy-Item "$srcPixbufDir\loaders.cache" -Destination "$destPixbufDir\loaders.cache" -Force
 }
 
-# 3. Recursively collect and copy all DLL dependencies
+# 3. Copy OpenSSL modules (legacy.dll for MD4/RC4/NTLM support in FreeRDP)
+$srcOsslDir = "C:\msys64\ucrt64\lib\ossl-modules"
+$destOsslDir = "$DistDir\lib\ossl-modules"
+if (Test-Path $srcOsslDir) {
+    New-Item -ItemType Directory -Force -Path $destOsslDir | Out-Null
+    Copy-Item "$srcOsslDir\*.dll" -Destination "$destOsslDir\" -Force
+    Write-Host "Copied OpenSSL legacy providers."
+}
+
+# 4. Recursively collect and copy all DLL dependencies
 $objdump = "C:\msys64\ucrt64\bin\objdump.exe"
 $systemDlls = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
 @(
@@ -64,6 +74,9 @@ $dllQueue = [System.Collections.Generic.Queue[string]]::new()
 $dllQueue.Enqueue("$DistDir\remmina.exe")
 $dllQueue.Enqueue("$DistDir\plugins\remmina-plugin-rdp.dll")
 Get-ChildItem -Path "$destPixbufDir\loaders\*.dll" | ForEach-Object {
+    $dllQueue.Enqueue($_.FullName)
+}
+Get-ChildItem -Path "$destOsslDir\*.dll" | ForEach-Object {
     $dllQueue.Enqueue($_.FullName)
 }
 
@@ -93,23 +106,21 @@ while ($dllQueue.Count -gt 0) {
                     Write-Host "  Copying $dllName"
                     Copy-Item $srcDll -Destination $destDll -Force
                     $dllQueue.Enqueue($destDll)
-                } else {
-                    Write-Warning "Could not find $dllName in $UcrtBin"
                 }
             }
         }
     }
 }
 
-# 4. Copy GLib schemas
+# 5. Copy GLib schemas
 Write-Host "Copying and compiling GLib schemas..."
 $destSchemaDir = "$DistDir\share\glib-2.0\schemas"
 New-Item -ItemType Directory -Force -Path $destSchemaDir | Out-Null
 Copy-Item "C:\msys64\ucrt64\share\glib-2.0\schemas\*" -Destination $destSchemaDir -Force
 & "C:\msys64\ucrt64\bin\glib-compile-schemas.exe" $destSchemaDir
 
-# 5. Copy Icons (Adwaita, hicolor, remmina icons)
-Write-Host "Copying icon themes..."
+# 6. Copy Icons (Adwaita, hicolor, remmina actions/emblems/apps/plugin icons)
+Write-Host "Copying icon themes and Remmina icons..."
 $destIcons = "$DistDir\share\icons"
 New-Item -ItemType Directory -Force -Path $destIcons | Out-Null
 
@@ -120,16 +131,75 @@ if (Test-Path "C:\msys64\ucrt64\share\icons\hicolor") {
     Copy-Item "C:\msys64\ucrt64\share\icons\hicolor" -Destination "$destIcons\hicolor" -Recurse -Force
 }
 
-$destRemminaIcons = "$destIcons\hicolor\scalable\apps"
-New-Item -ItemType Directory -Force -Path $destRemminaIcons | Out-Null
-Get-ChildItem -Path "$PSScriptRoot\data\icons\scalable\apps\*.svg" -ErrorAction SilentlyContinue | ForEach-Object {
-    Copy-Item $_.FullName -Destination $destRemminaIcons -Force
-}
-if (Test-Path "$destRemminaIcons\remmina.svg") {
-    Copy-Item "$destRemminaIcons\remmina.svg" -Destination "$destRemminaIcons\org.remmina.Remmina.svg" -Force
+# Actions
+$destActions = "$destIcons\hicolor\scalable\actions"
+New-Item -ItemType Directory -Force -Path $destActions | Out-Null
+Get-ChildItem -Path "$PSScriptRoot\data\icons\scalable\actions\*.svg" -ErrorAction SilentlyContinue | ForEach-Object {
+    Copy-Item $_.FullName -Destination $destActions -Force
+    $unprefixed = $_.Name -replace '^org\.remmina\.Remmina-', ''
+    if ($unprefixed -ne $_.Name) {
+        Copy-Item $_.FullName -Destination "$destActions\$unprefixed" -Force
+    }
 }
 
-# 6. Create remmina.bat launcher
+# Emblems
+$destEmblems = "$destIcons\hicolor\scalable\emblems"
+New-Item -ItemType Directory -Force -Path $destEmblems | Out-Null
+Get-ChildItem -Path "$PSScriptRoot\data\icons\scalable\emblems\*.svg" -ErrorAction SilentlyContinue | ForEach-Object {
+    Copy-Item $_.FullName -Destination $destEmblems -Force
+    $unprefixed = $_.Name -replace '^org\.remmina\.Remmina-', ''
+    if ($unprefixed -ne $_.Name) {
+        Copy-Item $_.FullName -Destination "$destEmblems\$unprefixed" -Force
+    }
+}
+
+# Plugin icons (RDP, VNC, etc.)
+Get-ChildItem -Path "$PSScriptRoot\plugins\*\scalable\emblems\*.svg" -ErrorAction SilentlyContinue | ForEach-Object {
+    Copy-Item $_.FullName -Destination $destEmblems -Force
+    $unprefixed = $_.Name -replace '^org\.remmina\.Remmina-', ''
+    if ($unprefixed -ne $_.Name) {
+        Copy-Item $_.FullName -Destination "$destEmblems\$unprefixed" -Force
+    }
+    if ($_.Name -match 'rdp') {
+        Copy-Item $_.FullName -Destination "$destEmblems\remmina-rdp.svg" -Force
+        Copy-Item $_.FullName -Destination "$destEmblems\remmina-rdp-symbolic.svg" -Force
+    }
+}
+
+# Desktop resolution icons (16x16 ... scalable)
+$desktopDirs = Get-ChildItem -Path "$PSScriptRoot\data\desktop" -Directory
+foreach ($d in $desktopDirs) {
+    if (Test-Path "$($d.FullName)\apps") {
+        $destAppDir = "$destIcons\hicolor\$($d.Name)\apps"
+        New-Item -ItemType Directory -Force -Path $destAppDir | Out-Null
+        Copy-Item "$($d.FullName)\apps\*" -Destination $destAppDir -Force
+    }
+}
+
+# Main app icons in apps
+$destApps = "$destIcons\hicolor\scalable\apps"
+New-Item -ItemType Directory -Force -Path $destApps | Out-Null
+if (Test-Path "$destApps\org.remmina.Remmina.svg") {
+    Copy-Item "$destApps\org.remmina.Remmina.svg" -Destination "$destApps\remmina.svg" -Force
+}
+
+# Update icon caches
+& "C:\msys64\ucrt64\bin\gtk-update-icon-cache.exe" -f -t "$destIcons\hicolor"
+& "C:\msys64\ucrt64\bin\gtk-update-icon-cache.exe" -f -t "$destIcons\Adwaita"
+
+# 7. Configure GTK3 settings.ini for default dark theme and Segoe UI font
+$etcGtk = "$DistDir\etc\gtk-3.0"
+$gtkSettings = @"
+[Settings]
+gtk-theme-name = Adwaita
+gtk-application-prefer-dark-theme = true
+gtk-icon-theme-name = hicolor
+gtk-fallback-icon-theme = Adwaita
+gtk-font-name = Segoe UI 10
+"@
+Set-Content -Path "$etcGtk\settings.ini" -Value $gtkSettings -Encoding ASCII
+
+# 8. Create remmina.bat launcher
 $launcherContent = @"
 @echo off
 setlocal
@@ -138,19 +208,25 @@ set "PATH=%DIR%;%PATH%"
 set "GSETTINGS_SCHEMA_DIR=%DIR%share\glib-2.0\schemas"
 set "GDK_PIXBUF_MODULE_FILE=%DIR%lib\gdk-pixbuf-2.0\2.10.0\loaders.cache"
 set "XDG_DATA_DIRS=%DIR%share"
+set "OPENSSL_MODULES=%DIR%lib\ossl-modules"
 start "" "%DIR%remmina.exe" %*
 "@
 Set-Content -Path "$DistDir\remmina.bat" -Value $launcherContent -Encoding ASCII
 
-# 7. Create ZIP archive
+# 9. Create portable ZIP archive
 $zipPath = "$PSScriptRoot\dist\remmina-win64-portable.zip"
 Write-Host "Creating portable ZIP archive: $zipPath..."
 if (Test-Path $zipPath) {
     Remove-Item -Force $zipPath
 }
-Compress-Archive -Path "$DistDir\*" -DestinationPath $zipPath -Force
 
-# 8. Summary
+if (Get-Command "7z.exe" -ErrorAction SilentlyContinue) {
+    & 7z.exe a -tzip -mx=5 $zipPath "$DistDir\*" | Out-Null
+} else {
+    Compress-Archive -Path "$DistDir\*" -DestinationPath $zipPath -Force
+}
+
+# 10. Summary
 $dllCount = (Get-ChildItem -Path "$DistDir\*.dll").Count
 Write-Host "`n=== Packaging Complete ===" -ForegroundColor Green
 Write-Host "Copied $dllCount DLL dependencies."

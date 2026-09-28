@@ -603,7 +603,11 @@ void remmina_pref_init(void)
 	if (g_key_file_has_key(gkeyfile, "remmina_pref", "dark_theme", NULL))
 		remmina_pref.dark_theme = g_key_file_get_boolean(gkeyfile, "remmina_pref", "dark_theme", NULL);
 	else
+#ifdef _WIN32
+		remmina_pref.dark_theme = TRUE;
+#else
 		remmina_pref.dark_theme = FALSE;
+#endif
 
 	if (g_key_file_has_key(gkeyfile, "remmina_pref", "dark_theme_auto", NULL))
 		remmina_pref.dark_theme_auto = g_key_file_get_boolean(gkeyfile, "remmina_pref", "dark_theme_auto", NULL);

@@ -49,6 +49,9 @@
  */
 
 #include "config.h"
+#ifdef _WIN32
+#include <windows.h>
+#endif
 #include <gtk/gtk.h>
 #include <gio/gio.h>
 
@@ -65,10 +68,13 @@
 
 /* Cached desktop preference: TRUE when the OS currently asks for a dark theme. */
 static gboolean system_prefers_dark = FALSE;
+#ifndef _WIN32
 /* Proxy kept alive for the whole session so the SettingChanged signal keeps firing. */
 static GDBusProxy *settings_proxy = NULL;
+#endif
 static gboolean theme_initialized = FALSE;
 
+#ifndef _WIN32
 /**
  * The portal returns values wrapped in one or more variant layers depending on
  * the method (Read double-wraps, ReadOne and SettingChanged single-wrap).
@@ -184,6 +190,7 @@ static void remmina_theme_read_initial(GDBusProxy *proxy)
 		g_clear_error(&error);
 	}
 }
+#endif
 
 gboolean remmina_theme_system_prefers_dark(void)
 {
@@ -205,13 +212,15 @@ void remmina_theme_apply(void)
 	else
 		dark = remmina_pref.dark_theme;
 
-	g_object_set(settings, "gtk-application-prefer-dark-theme", dark, NULL);
+	g_object_set(settings,
+	             "gtk-theme-name", "Adwaita",
+	             "gtk-application-prefer-dark-theme", dark,
+	             NULL);
 }
 
 void remmina_theme_init(void)
 {
 	TRACE_CALL(__func__);
-	GError *error = NULL;
 
 	if (theme_initialized) {
 		remmina_theme_apply();
@@ -219,6 +228,23 @@ void remmina_theme_init(void)
 	}
 	theme_initialized = TRUE;
 
+#ifdef _WIN32
+	HKEY hKey;
+	DWORD val = 1;
+	DWORD sz = sizeof(DWORD);
+	if (RegOpenKeyExW(HKEY_CURRENT_USER,
+	                  L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+	                  0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+		RegQueryValueExW(hKey, L"AppsUseLightTheme", NULL, NULL, (LPBYTE)&val, &sz);
+		RegCloseKey(hKey);
+	}
+	system_prefers_dark = (val == 0);
+	REMMINA_DEBUG("Windows dark theme detection: AppsUseLightTheme=%lu, prefers_dark=%d",
+	              (unsigned long)val, system_prefers_dark);
+	remmina_theme_apply();
+	return;
+#else
+	GError *error = NULL;
 	settings_proxy = g_dbus_proxy_new_for_bus_sync(G_BUS_TYPE_SESSION,
 						       G_DBUS_PROXY_FLAGS_NONE,
 						       NULL,
@@ -238,4 +264,5 @@ void remmina_theme_init(void)
 	}
 
 	remmina_theme_apply();
+#endif
 }

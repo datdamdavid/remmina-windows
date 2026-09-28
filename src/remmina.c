@@ -332,8 +332,23 @@ static void remmina_on_startup(GApplication *app)
 	g_unix_signal_add(SIGTERM, remmina_sigint_cb, NULL);
 #endif
 
+#ifdef _WIN32
+	wchar_t w_exe[MAX_PATH];
+	if (GetModuleFileNameW(NULL, w_exe, MAX_PATH)) {
+		gchar *utf8_exe = g_utf16_to_utf8(w_exe, -1, NULL, NULL, NULL);
+		if (utf8_exe) {
+			gchar *exe_d = g_path_get_dirname(utf8_exe);
+			gchar *icons_d = g_build_filename(exe_d, "share", "icons", NULL);
+			gtk_icon_theme_append_search_path(gtk_icon_theme_get_default(), icons_d);
+			g_free(icons_d);
+			g_free(exe_d);
+			g_free(utf8_exe);
+		}
+	}
+#else
 	gtk_icon_theme_append_search_path(gtk_icon_theme_get_default(),
 					  REMMINA_RUNTIME_DATADIR G_DIR_SEPARATOR_S "icons");
+#endif
 	g_application_hold(app);
 	remmina_info_schedule();
 
@@ -448,6 +463,15 @@ int main(int argc, char *argv[])
 			// 4. Set GTK_DATA_PREFIX if not set
 			if (!g_getenv("GTK_DATA_PREFIX")) {
 				g_setenv("GTK_DATA_PREFIX", exe_dir, TRUE);
+			}
+
+			// 5. Set OPENSSL_MODULES if not set
+			if (!g_getenv("OPENSSL_MODULES")) {
+				gchar *ossl_modules = g_build_filename(exe_dir, "lib", "ossl-modules", NULL);
+				if (g_file_test(ossl_modules, G_FILE_TEST_IS_DIR)) {
+					g_setenv("OPENSSL_MODULES", ossl_modules, TRUE);
+				}
+				g_free(ossl_modules);
 			}
 
 			g_free(exe_dir);
