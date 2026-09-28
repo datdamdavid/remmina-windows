@@ -670,8 +670,11 @@ void remmina_pref_init(void)
 
 	if (g_key_file_has_key(gkeyfile, "remmina_pref", "hostkey", NULL))
 		remmina_pref.hostkey = g_key_file_get_integer(gkeyfile, "remmina_pref", "hostkey", NULL);
-	else
+#ifdef _WIN32
+		remmina_pref.hostkey = 0;
+#else
 		remmina_pref.hostkey = GDK_KEY_Control_R;
+#endif
 
 	if (g_key_file_has_key(gkeyfile, "remmina_pref", "shortcutkey_fullscreen", NULL))
 		remmina_pref.shortcutkey_fullscreen = g_key_file_get_integer(gkeyfile, "remmina_pref", "shortcutkey_fullscreen",

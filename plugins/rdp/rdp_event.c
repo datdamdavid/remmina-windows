@@ -48,6 +48,9 @@
 #include <cairo/cairo.h>
 #endif
 #include <freerdp/locale/keyboard.h>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 gboolean remmina_rdp_event_on_map(RemminaProtocolWidget *gp)
 {
@@ -913,6 +916,121 @@ static void remmina_rdp_event_init_keymap(rfContext *rfi, const gchar *strmap)
 	}
 }
 
+#if defined(_WIN32)
+static DWORD remmina_rdp_event_get_windows_scancode(DWORD vk, guint keyval, DWORD keyboard_type)
+{
+	/* Distinguish Left vs Right modifier keys and extended keys using GTK keyval */
+	switch (keyval) {
+	case GDK_KEY_Shift_L:
+		return 0x2A;
+	case GDK_KEY_Shift_R:
+		return 0x36;
+	case GDK_KEY_Control_L:
+		return 0x1D;
+	case GDK_KEY_Control_R:
+		return 0x1D | 0x100;
+	case GDK_KEY_Alt_L:
+		return 0x38;
+	case GDK_KEY_Alt_R:
+	case GDK_KEY_ISO_Level3_Shift:
+	case GDK_KEY_Mode_switch:
+		return 0x38 | 0x100;
+	case GDK_KEY_Super_L:
+		return 0x5B | 0x100;
+	case GDK_KEY_Super_R:
+		return 0x5C | 0x100;
+	case GDK_KEY_Menu:
+		return 0x5D | 0x100;
+
+	/* Navigation & Editing cluster (Extended keys in RDP protocol) */
+	case GDK_KEY_Insert:
+		return 0x52 | 0x100;
+	case GDK_KEY_Delete:
+		return 0x53 | 0x100;
+	case GDK_KEY_Home:
+		return 0x47 | 0x100;
+	case GDK_KEY_End:
+		return 0x4F | 0x100;
+	case GDK_KEY_Page_Up:
+		return 0x49 | 0x100;
+	case GDK_KEY_Page_Down:
+		return 0x51 | 0x100;
+	case GDK_KEY_Left:
+		return 0x4B | 0x100;
+	case GDK_KEY_Right:
+		return 0x4D | 0x100;
+	case GDK_KEY_Up:
+		return 0x48 | 0x100;
+	case GDK_KEY_Down:
+		return 0x50 | 0x100;
+
+	/* Keypad extended keys */
+	case GDK_KEY_KP_Enter:
+		return 0x1C | 0x100;
+	case GDK_KEY_KP_Divide:
+		return 0x35 | 0x100;
+	case GDK_KEY_Print:
+		return 0x37 | 0x100;
+	}
+
+	/* Fallback by Virtual-Key code if keyval didn't match directly */
+	switch (vk) {
+	case VK_SHIFT:
+	case VK_LSHIFT:
+		return (GetKeyState(VK_RSHIFT) & 0x8000) ? 0x36 : 0x2A;
+	case VK_RSHIFT:
+		return 0x36;
+	case VK_CONTROL:
+	case VK_LCONTROL:
+		return (GetKeyState(VK_RCONTROL) & 0x8000) ? (0x1D | 0x100) : 0x1D;
+	case VK_RCONTROL:
+		return 0x1D | 0x100;
+	case VK_MENU:
+	case VK_LMENU:
+		return (GetKeyState(VK_RMENU) & 0x8000) ? (0x38 | 0x100) : 0x38;
+	case VK_RMENU:
+		return 0x38 | 0x100;
+	case VK_LWIN:
+		return 0x5B | 0x100;
+	case VK_RWIN:
+		return 0x5C | 0x100;
+	case VK_APPS:
+		return 0x5D | 0x100;
+	case VK_INSERT:
+		return 0x52 | 0x100;
+	case VK_DELETE:
+		return 0x53 | 0x100;
+	case VK_HOME:
+		return 0x47 | 0x100;
+	case VK_END:
+		return 0x4F | 0x100;
+	case VK_PRIOR:
+		return 0x49 | 0x100;
+	case VK_NEXT:
+		return 0x51 | 0x100;
+	case VK_LEFT:
+		return 0x4B | 0x100;
+	case VK_RIGHT:
+		return 0x4D | 0x100;
+	case VK_UP:
+		return 0x48 | 0x100;
+	case VK_DOWN:
+		return 0x50 | 0x100;
+	case VK_DIVIDE:
+		return 0x35 | 0x100;
+	case VK_SNAPSHOT:
+		return 0x37 | 0x100;
+	}
+
+	UINT mvk = MapVirtualKey(vk, MAPVK_VK_TO_VSC);
+	if (mvk != 0) {
+		return mvk;
+	}
+
+	return GetVirtualScanCodeFromVirtualKeyCode(vk, keyboard_type);
+}
+#endif
+
 static gboolean remmina_rdp_event_on_key(GtkWidget *widget, GdkEventKey *event, RemminaProtocolWidget *gp)
 {
 	TRACE_CALL(__func__);
@@ -988,20 +1106,21 @@ static gboolean remmina_rdp_event_on_key(GtkWidget *widget, GdkEventKey *event, 
 				keyboard_type = WINPR_KBD_TYPE_IBM_ENHANCED;
 			}
 #if defined(_WIN32)
-			DWORD vc = hardware_keycode;
+			const DWORD sc = remmina_rdp_event_get_windows_scancode(hardware_keycode, event->keyval, keyboard_type);
 #elif defined(GDK_WINDOWING_X11)
 			DWORD vc = GetVirtualKeyCodeFromKeycode(hardware_keycode, WINPR_KEYCODE_TYPE_XKB);
+			const DWORD sc = GetVirtualScanCodeFromVirtualKeyCode(vc, keyboard_type);
 #else
 			DWORD vc = GetVirtualKeyCodeFromKeycode(hardware_keycode, WINPR_KEYCODE_TYPE_EVDEV);
+			const DWORD sc = GetVirtualScanCodeFromVirtualKeyCode(vc, keyboard_type);
 #endif
-			const DWORD sc = GetVirtualScanCodeFromVirtualKeyCode(vc, keyboard_type); 
 			scancode = freerdp_keyboard_remap_key(rfi->remap_table, sc);
 #else
 			scancode = freerdp_keyboard_get_rdp_scancode_from_x11_keycode(hardware_keycode);
 #endif
 			if (scancode) {
 				rdp_event.key_event.key_code = scancode & 0xFF;
-				rdp_event.key_event.extended = scancode & 0x100;
+				rdp_event.key_event.extended = (scancode & 0x100) ? TRUE : FALSE;
 				rdp_event.key_event.extended1 = FALSE;
 				remmina_rdp_event_event_push(gp, &rdp_event);
 				keypress_list_add(gp, rdp_event);
@@ -1032,19 +1151,20 @@ static gboolean remmina_rdp_event_on_key(GtkWidget *widget, GdkEventKey *event, 
 					keyboard_type = WINPR_KBD_TYPE_IBM_ENHANCED;
 				}
 #if defined(_WIN32)
-				DWORD vc = hardware_keycode;
+				const DWORD sc = remmina_rdp_event_get_windows_scancode(hardware_keycode, event->keyval, keyboard_type);
 #elif defined(GDK_WINDOWING_X11)
 				DWORD vc = GetVirtualKeyCodeFromKeycode(hardware_keycode, WINPR_KEYCODE_TYPE_XKB);
+				const DWORD sc = GetVirtualScanCodeFromVirtualKeyCode(vc, keyboard_type);
 #else
 				DWORD vc = GetVirtualKeyCodeFromKeycode(hardware_keycode, WINPR_KEYCODE_TYPE_EVDEV);
+				const DWORD sc = GetVirtualScanCodeFromVirtualKeyCode(vc, keyboard_type);
 #endif
-				const DWORD sc = GetVirtualScanCodeFromVirtualKeyCode(vc, keyboard_type); 
 				DWORD scancode = freerdp_keyboard_remap_key(rfi->remap_table, sc);
 #else
 				scancode = freerdp_keyboard_get_rdp_scancode_from_x11_keycode(event->hardware_keycode);
 #endif
 				rdp_event.key_event.key_code = scancode & 0xFF;
-				rdp_event.key_event.extended = scancode & 0x100;
+				rdp_event.key_event.extended = (scancode & 0x100) ? TRUE : FALSE;
 				rdp_event.key_event.extended1 = FALSE;
 				if (rdp_event.key_event.key_code) {
 					remmina_rdp_event_event_push(gp, &rdp_event);
